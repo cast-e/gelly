@@ -6,7 +6,8 @@ local objects = {}
 local WHITELISTED_ENTITY_CLASSES = {
 	"prop_physics",
 	"gmod_wheel",
-	"func_*"
+	"func_*",
+	"gelly_*"
 }
 
 local function isClassWhitelisted(entity)
@@ -89,8 +90,6 @@ local function updateObject(entity)
 	end
 end
 
-local PLAYER_RADIUS = 15
-local PLAYER_HALFHEIGHT = 16
 hook.Add("GellyLoaded", "gelly.object-management-initialize", function()
 	-- fetch any entities that may've been created before the hook was added
 	timer.Simple(0.1,
