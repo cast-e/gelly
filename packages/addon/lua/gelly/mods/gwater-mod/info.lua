@@ -5,7 +5,9 @@ return {
 	Description = "This mod adds pretty much all the entities (that i managed to port) from Gwater 1.",
 	Type = gellyx.mods.ModType.Global,
 
-	Weapons = {},
+	Weapons = {
+		"gelly_piss",
+	},
 	Entities = {
 		"gelly_bathtub",
 		"gelly_blackhole",
