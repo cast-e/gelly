@@ -40,7 +40,7 @@ function ENT:Think()
 
 	local isEmitting = self:GetNWBool("Emitting")
 	if isEmitting then
-		local pos = self:LocalToWorld(Vector(1, 0, -20))
+		local pos = self:LocalToWorld(Vector(5, 0, -16))
 		local ang = self:LocalToWorldAngles(Angle(-70, 0, 0))
 
 		gellyx.emitters.Sphere( {
