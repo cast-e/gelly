@@ -9,6 +9,15 @@ local WHITELISTED_ENTITY_CLASSES = {
 	"func_*"
 }
 
+local EXPLOSIVE_ENTITY_CLASSES = {
+	npc_grenade_frag=true,
+	grenade_ar2=true,
+	grenade_helicopter=true,
+	combine_mine=true,
+	rpg_missile=true,
+	prop_combine_ball=true
+}
+
 local function isClassWhitelisted(entity)
 	return array(WHITELISTED_ENTITY_CLASSES):any(function(class)
 		local classSubstring = class
@@ -91,6 +100,27 @@ local function updateObject(entity)
 	end
 end
 
+local function detectExplosions(entity)
+	if IsValid(entity) and EXPLOSIVE_ENTITY_CLASSES[entity:GetClass()] then
+		entity:CallOnRemove("gelly.explosion-detection", function(removed)
+
+			local forcefield = gellyx.forcefield.create({
+				Position = removed:GetPos(),
+				Radius = 750,
+				Strength = 1000,
+				LinearFalloff = true,
+				Mode = gellyx.forcefield.Mode.VelocityChange,
+			})
+
+			timer.Simple(0.1, function()
+				forcefield:Remove()
+			end)
+		end)
+	end
+end
+
+
+
 local PLAYER_RADIUS = 15
 local PLAYER_HALFHEIGHT = 16
 hook.Add("GellyLoaded", "gelly.object-management-initialize", function()
@@ -105,6 +135,7 @@ hook.Add("GellyLoaded", "gelly.object-management-initialize", function()
 			-- Empirical fix for teleportation:
 			-- After much experimentation, Gelly was proven to be properly handling entity updates,
 			-- but GMod is actually the issue--giving us the wrong entity position immediately after creation.
+			detectExplosions(entity)
 			addObject(entity)
 			updateObject(entity)
 		end)
