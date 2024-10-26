@@ -10,8 +10,8 @@ function ENT:Initialize()
 	if CLIENT then
 		self.ForceField = gellyx.forcefield.create( {
 			Position = self:GetPos(),
-			Radius = 750,
-			Strength = -100,
+			Radius = 1000,
+			Strength = -25,
 			LinearFalloff = true,
 			Mode = gellyx.forcefield.Mode.Force,
 		} )
