@@ -12,6 +12,11 @@ gellyx.settings.convars = {
 	simulation_rate = settingConvar("simulation_rate", 60, "Controls the simulation rate of the fluid", 20, 144),
 	simulation_substeps = settingConvar("simulation_substeps", 3, "Controls the substeps of the fluid", 1, 100),
 	simulation_iterations = settingConvar("simulation_iterations", 3, "Controls the iterations of the fluid", 1, 100),
+	simulation_relaxation = settingConvar("simulation_relaxation", 1, "Controls the relaxation factor of the solver", 0,
+		1),
+	simulation_collision_distance = settingConvar("simulation_collision_distance", 0.6,
+		"Controls the collision distance of the fluid", 0.01, 1),
+	simulation_gravity = settingConvar("simulation_gravity", -4, "Controls the gravity of the fluid", -100, 100),
 	fluid_radius = settingConvar("fluid_radius", 1, "Controls the radius of the fluid", 1, 5),
 	fluid_viscosity = settingConvar("fluid_viscosity", 1, "Controls the viscosity of the fluid", 0, 100),
 	fluid_cohesion = settingConvar("fluid_cohesion", 1, "Controls the cohesion of the fluid", 0, 1),
@@ -41,6 +46,11 @@ gellyx.settings.convars = {
 	gelly_gun_secondary_velocity = settingConvar("gelly_gun_secondary_velocity", 70,
 		"Controls the velocity of the secondary emission", 10, 220),
 	gelly_gun_density = settingConvar("gelly_gun_density", 150, "Controls the density of the emission", 1, 1000),
+
+	resolution_scale = settingConvar("resolution_scale", 0.75,
+		"Controls the rendering scale of the fluid as a percentage of the current resolution.", 0.25, 1.25),
+	glunk_lighting_fix = settingConvar("glunk_lighting_fix", 1, "Controls the lighting fix for Glunk (0 = off, 1 = on)",
+		0, 1),
 }
 
 function gellyx.settings.registerOnChange(name, callback)
