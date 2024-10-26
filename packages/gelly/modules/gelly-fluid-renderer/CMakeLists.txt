@@ -49,6 +49,9 @@ add_library(
         src/v2/renderers/splatting/pipelines/surface-filtering.h
         src/v2/renderers/splatting/splatting-renderer.cpp
         src/v2/renderers/splatting/splatting-renderer.h
+        src/v2/renderers/splatting/reload-shaders.h
+        src/v2/helpers/rendering/gpu-duration.h
+        src/v2/helpers/rendering/gpu-duration.cpp
 )
 
 target_include_directories(
@@ -59,7 +62,6 @@ target_include_directories(
         src/shaders/isosurface/out
         src
         ../gelly-interfaces/include
-        ../gelly-d3d/include
         ../gelly-fluid-sim/include
         # For the in-application API
         vendor/renderdoc/renderdoc/api/app
@@ -68,8 +70,8 @@ target_include_directories(
 target_link_libraries(
         gelly_fluid_renderer
         PUBLIC
-        gelly_d3d9
         gelly_fluid_sim
+        d3d11.lib
         dxguid.lib
 )
 

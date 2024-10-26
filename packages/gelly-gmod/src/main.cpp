@@ -15,6 +15,9 @@
 #include <MinHook.h>
 #include <Windows.h>
 
+#include <fstream>
+
+#include "binaries/gbp.h"
 #include "composite/GModCompositor.h"
 #include "exceptions/generate-stack-trace.h"
 #include "exceptions/get-stack-size.h"
@@ -334,8 +337,9 @@ LUA_FUNCTION(gelly_AddForcefieldObject) {
 	const float radius = luaTable.Get("Radius", 0.f);
 	const float strength = luaTable.Get("Strength", 0.f);
 	const bool linearFalloff = luaTable.Get("LinearFalloff", false);
-	const int mode =
-		luaTable.Get("Mode", NvFlexExtForceMode::eNvFlexExtModeForce);
+	const int mode = luaTable.Get(
+		"Mode", static_cast<int>(NvFlexExtForceMode::eNvFlexExtModeForce)
+	);
 
 	ObjectCreationParams forcefield = {};
 	forcefield.shape = ObjectShape::FORCEFIELD;
@@ -516,6 +520,7 @@ LUA_FUNCTION(gelly_SetFluidProperties) {
 	GET_LUA_TABLE_MEMBER(float, VorticityConfinement);
 	GET_LUA_TABLE_MEMBER(float, Adhesion);
 	GET_LUA_TABLE_MEMBER(float, DynamicFriction);
+	GET_LUA_TABLE_MEMBER(float, RestDistanceRatio);
 
 	SetFluidProperties props = {};
 	props.viscosity = Viscosity;
@@ -524,6 +529,7 @@ LUA_FUNCTION(gelly_SetFluidProperties) {
 	props.vorticityConfinement = VorticityConfinement;
 	props.adhesion = Adhesion;
 	props.dynamicFriction = DynamicFriction;
+	props.restDistanceRatio = RestDistanceRatio;
 
 	scene->SetFluidProperties(props);
 	CATCH_GELLY_EXCEPTIONS();
@@ -554,19 +560,6 @@ LUA_FUNCTION(gelly_SetFluidMaterial) {
 	material.diffuseColor[2] = DiffuseColor_v.z;
 
 	compositor->SetFluidMaterial(material);
-	CATCH_GELLY_EXCEPTIONS();
-	return 0;
-}
-
-LUA_FUNCTION(gelly_SetCubemapStrength) {
-	START_GELLY_EXCEPTIONS();
-	LUA->CheckType(1, GarrysMod::Lua::Type::Number);
-
-	const float strength = static_cast<float>(LUA->GetNumber(1));
-	PipelineConfig config = compositor->GetConfig();
-	config.cubemapStrength = strength;
-	compositor->SetConfig(config);
-
 	CATCH_GELLY_EXCEPTIONS();
 	return 0;
 }
@@ -669,6 +662,7 @@ LUA_FUNCTION(gelly_ChangeMaxParticles) {
 	// although the sim context should be fine
 	unsigned int originalWidth = compositor->GetWidth();
 	unsigned int originalHeight = compositor->GetHeight();
+	float originalScale = compositor->GetScale();
 
 	sim.reset();
 	sim = MakeFluidSimulation(simContext.get());
@@ -681,7 +675,8 @@ LUA_FUNCTION(gelly_ChangeMaxParticles) {
 		rendererDevice,
 		originalWidth,
 		originalHeight,
-		newMax
+		newMax,
+		originalScale
 	);
 
 	scene->SetAbsorptionModifier(compositor->GetAbsorptionModifier());
@@ -719,11 +714,13 @@ LUA_FUNCTION(gelly_SetGellySettings) {
 
 	GET_LUA_TABLE_MEMBER(float, FilterIterations);
 	GET_LUA_TABLE_MEMBER(bool, EnableGPUSynchronization);
+	GET_LUA_TABLE_MEMBER(bool, EnableGPUTiming);
 
 	int filterIterations = static_cast<int>(FilterIterations);
 	auto currentSettings = compositor->GetGellySettings();
 	currentSettings.filterIterations = filterIterations;
 	currentSettings.enableGPUSynchronization = EnableGPUSynchronization_b;
+	currentSettings.enableGPUTiming = EnableGPUTiming_b;
 
 	compositor->UpdateGellySettings(currentSettings);
 	CATCH_GELLY_EXCEPTIONS();
@@ -739,9 +736,121 @@ LUA_FUNCTION(gelly_GetGellySettings) {
 	LUA->SetField(-2, "FilterIterations");
 	LUA->PushBool(currentSettings.enableGPUSynchronization);
 	LUA->SetField(-2, "EnableGPUSynchronization");
+	LUA->PushBool(currentSettings.enableGPUTiming);
+	LUA->SetField(-2, "EnableGPUTiming");
 
 	CATCH_GELLY_EXCEPTIONS();
 	return 1;
+}
+
+LUA_FUNCTION(gelly_GetGellyTimings) {
+	START_GELLY_EXCEPTIONS();
+	auto timings = compositor->FetchGellyTimings();
+
+	LUA->CreateTable();
+	LUA->PushNumber(timings.albedoDownsampling);
+	LUA->SetField(-2, "AlbedoDownsampling");
+	LUA->PushNumber(timings.ellipsoidSplatting);
+	LUA->SetField(-2, "EllipsoidSplatting");
+	LUA->PushNumber(timings.surfaceFiltering);
+	LUA->SetField(-2, "SurfaceFiltering");
+	LUA->PushNumber(timings.rawNormalEstimation);
+	LUA->SetField(-2, "RawNormalEstimation");
+	LUA->PushBool(timings.isDisjoint);
+	LUA->SetField(-2, "IsDisjoint");
+
+	CATCH_GELLY_EXCEPTIONS();
+	return 1;
+}
+
+LUA_FUNCTION(gelly_ConfigureSim) {
+	START_GELLY_EXCEPTIONS();
+	LUA->CheckType(1, GarrysMod::Lua::Type::Table);
+
+	GET_LUA_TABLE_MEMBER(float, Substeps);
+	GET_LUA_TABLE_MEMBER(float, Iterations);
+	GET_LUA_TABLE_MEMBER(float, RelaxationFactor);
+	GET_LUA_TABLE_MEMBER(float, CollisionDistance);
+	GET_LUA_TABLE_MEMBER(float, Gravity);
+
+	int substeps = static_cast<int>(Substeps);
+	int iterations = static_cast<int>(Iterations);
+
+	scene->Configure(
+		{.substeps = substeps,
+		 .iterations = iterations,
+		 .relaxationFactor = RelaxationFactor,
+		 .collisionDistance = CollisionDistance,
+		 .gravity = Gravity}
+	);
+
+	CATCH_GELLY_EXCEPTIONS();
+
+	return 0;
+}
+
+// We split these into free functions since these will likely be called very
+// often
+LUA_FUNCTION(gelly_SetSunDirection) {
+	START_GELLY_EXCEPTIONS();
+	LUA->CheckType(1, GarrysMod::Lua::Type::Vector);
+
+	const auto sunDirection = LUA->GetVector(1);
+	auto config = compositor->GetConfig();
+
+	config.sunDirection[0] = sunDirection.x;
+	config.sunDirection[1] = sunDirection.y;
+	config.sunDirection[2] = sunDirection.z;
+
+	compositor->SetConfig(config);
+	CATCH_GELLY_EXCEPTIONS();
+	return 0;
+}
+
+LUA_FUNCTION(gelly_SetSunEnabled) {
+	START_GELLY_EXCEPTIONS();
+	LUA->CheckType(1, GarrysMod::Lua::Type::Bool);
+
+	const auto enabled = LUA->GetBool(1);
+	auto config = compositor->GetConfig();
+	config.sunEnabled = enabled ? 1.f : 0.f;
+
+	compositor->SetConfig(config);
+	CATCH_GELLY_EXCEPTIONS();
+	return 0;
+}
+
+LUA_FUNCTION(gelly_IsRWDIBuild) {
+	START_GELLY_EXCEPTIONS();
+#ifdef GELLY_ENABLE_RENDERDOC_CAPTURES
+	LUA->PushBool(true);
+#else
+	LUA->PushBool(false);
+#endif
+	CATCH_GELLY_EXCEPTIONS();
+	return 1;
+}
+
+#ifdef GELLY_ENABLE_RENDERDOC_CAPTURES
+LUA_FUNCTION(gelly_ReloadAllShaders) {
+	START_GELLY_EXCEPTIONS();
+	compositor->ReloadAllShaders();
+	CATCH_GELLY_EXCEPTIONS();
+	return 0;
+}
+#endif
+
+LUA_FUNCTION(gelly_ChangeResolution) {
+	START_GELLY_EXCEPTIONS();
+	float width = static_cast<float>(LUA->GetNumber(1));
+	float height = static_cast<float>(LUA->GetNumber(2));
+	float scale = static_cast<float>(LUA->GetNumber(3)
+	);	// used when the scale is changed but not resolution
+
+	compositor->ChangeResolution(width, height, scale);
+
+	CATCH_GELLY_EXCEPTIONS();
+	return 0;
 }
 
 extern "C" __declspec(dllexport) int gmod13_open(lua_State *L) {
@@ -767,6 +876,47 @@ extern "C" __declspec(dllexport) int gmod13_open(lua_State *L) {
 
 	LOG_INFO("Hello, world!");
 	LOG_INFO("Grabbing initial information...");
+#ifndef _MSC_VER
+	LOG_WARNING("This copy of Gelly was built with a non-MSVC compiler!");
+	LOG_WARNING("The first load may throw a 'Module not found' error.")
+#endif
+	LOG_INFO("Creating temporary binaries...");
+	for (const auto &binary : gbp::packedBinaries) {
+		const auto binaryPath =
+			std::filesystem::current_path() / binary.moduleName;
+
+		if (exists(binaryPath)) {
+			LOG_WARNING(
+				"Found conflicting binary '%s', deleting...",
+				binaryPath.string().c_str()
+			);
+
+			std::error_code ec;
+			bool successfullyRemoved = std::filesystem::remove(binaryPath, ec);
+			if (!successfullyRemoved) {
+				LOG_WARNING(
+					"Could not remove binary '%s'. Typically, this happens "
+					"when Windoes does not want to let go of the DLL, implying "
+					"usage (GWater2)",
+					binaryPath.string().c_str()
+				);
+
+				// don't even continue with writing the new binary
+				continue;
+			}
+		}
+
+		std::ofstream binaryFile(binaryPath, std::ios::binary);
+		binaryFile.write(
+			reinterpret_cast<const char *>(binary.data), binary.dataSize
+		);
+		binaryFile.close();
+
+		LOG_INFO(
+			"Wrote binary '%s' to disk for loading...",
+			binaryPath.string().c_str()
+		);
+	}
 
 	CViewSetup currentView = {};
 	GetClientViewSetup(currentView);
@@ -803,7 +953,8 @@ extern "C" __declspec(dllexport) int gmod13_open(lua_State *L) {
 		rendererDevice,
 		currentView.width,
 		currentView.height,
-		DEFAULT_MAX_PARTICLES
+		DEFAULT_MAX_PARTICLES,
+		1.f
 	);
 
 	scene->SetAbsorptionModifier(compositor->GetAbsorptionModifier());
@@ -846,7 +997,6 @@ extern "C" __declspec(dllexport) int gmod13_open(lua_State *L) {
 	DEFINE_LUA_FUNC(gelly, SetObjectRotation);
 	DEFINE_LUA_FUNC(gelly, SetFluidProperties);
 	DEFINE_LUA_FUNC(gelly, SetFluidMaterial);
-	DEFINE_LUA_FUNC(gelly, SetCubemapStrength);
 	DEFINE_LUA_FUNC(gelly, ChangeParticleRadius);
 	DEFINE_LUA_FUNC(gelly, Reset);
 	DEFINE_LUA_FUNC(gelly, ChangeThresholdRatio);
@@ -858,6 +1008,15 @@ extern "C" __declspec(dllexport) int gmod13_open(lua_State *L) {
 	DEFINE_LUA_FUNC(gelly, GetVersion);
 	DEFINE_LUA_FUNC(gelly, SetGellySettings);
 	DEFINE_LUA_FUNC(gelly, GetGellySettings);
+	DEFINE_LUA_FUNC(gelly, GetGellyTimings);
+	DEFINE_LUA_FUNC(gelly, ConfigureSim);
+	DEFINE_LUA_FUNC(gelly, SetSunDirection);
+	DEFINE_LUA_FUNC(gelly, SetSunEnabled);
+	DEFINE_LUA_FUNC(gelly, IsRWDIBuild);
+	DEFINE_LUA_FUNC(gelly, ChangeResolution);
+#ifdef GELLY_ENABLE_RENDERDOC_CAPTURES
+	DEFINE_LUA_FUNC(gelly, ReloadAllShaders);
+#endif
 	DumpLuaStack("After defining functions", LUA);
 	LUA->SetField(-2, "gelly");
 	DumpLuaStack("Setting gelly table", LUA);

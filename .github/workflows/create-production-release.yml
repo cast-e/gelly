@@ -42,17 +42,33 @@ jobs:
                 with:
                     arch: amd64
 
+            -   name: Set up NodeJS
+                uses: actions/setup-node@v4
+                with:
+                    node-version: '20.1.0'
+
+            -   name: Build the addon UI
+                run: |
+                    cd packages/addon-ui
+                    npm install
+                    npm run build:gmod
+
             -   name: Run sccache-cache
                 uses: mozilla-actions/sccache-action@v0.0.3
 
+            -   name: Download rcedit-x64
+                run: |
+                    Invoke-WebRequest "https://github.com/electron/rcedit/releases/download/v2.0.0/rcedit-x64.exe" -OutFile "rcedit-x64.exe"
+
             -   name: Perform build
                 run: |
-                    cmake -DGELLY_PRODUCTION_BUILD=ON --fresh --preset ${{ matrix.presets.configure }} -S . -B bin/${{ matrix.presets.configure }}
+                    # We'll want cmake to know about rcedit so we'll just add the current working directory as a search root
+                    cmake -DGELLY_PRODUCTION_BUILD=ON --fresh --preset ${{ matrix.presets.configure }} -S . -B bin/${{ matrix.presets.configure }} -DCMAKE_PROGRAM_PATH="$(Get-Location)"
                     cmake --build --target gelly-gmod --preset ${{ matrix.presets.build }}
 
-            -   name: Add addon to release
+            -   name: Add addon to release (no GMA)
                 run: |
-                    scripts/gmad.exe create -folder packages/addon -out release/garrysmod/addons/gelly/gelly.gma
+                    Copy-Item -Path "packages/addon/*" -Destination "release/garrysmod/addons/gelly" -Recurse -Force -Verbose
 
             -   name: Upload release
                 uses: actions/upload-artifact@v4

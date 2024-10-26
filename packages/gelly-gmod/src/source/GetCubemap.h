@@ -1,12 +1,13 @@
 #ifndef GETCUBEMAP_H
 #define GETCUBEMAP_H
 
+#include <d3d9.h>
+
 #include <optional>
 
 #include "GarrysMod/Lua/SourceCompat.h"
 #include "MathTypes.h"
 #include "Signatures.h"
-#include "detail/d3d9/Texture.h"
 
 enum LightType_t {
 	MATERIAL_LIGHT_DISABLE = 0,
@@ -66,6 +67,7 @@ std::optional<LightDesc_t> GetLightDesc(int index);
 int GetMaxLights();
 
 AmbientLightCube *GetAmbientLightCube();
+void SetupAmbientLightCubeHook();
 void RemoveAmbientLightCubeHooks();
 
 #endif	// GETCUBEMAP_H

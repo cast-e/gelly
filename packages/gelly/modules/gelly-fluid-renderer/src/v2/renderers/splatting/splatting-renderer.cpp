@@ -1,9 +1,12 @@
 #include "splatting-renderer.h"
 
+#include "pipelines/albedo-downsampling.h"
 #include "pipelines/ellipsoid-splatting.h"
 #include "pipelines/normal-estimation.h"
 #include "pipelines/surface-filtering.h"
-#include "pipelines/thickness-extraction.h"
+#ifdef GELLY_ENABLE_RENDERDOC_CAPTURES
+#include "reload-shaders.h"
+#endif
 
 namespace gelly {
 namespace renderer {
@@ -34,7 +37,13 @@ SplattingRenderer::SplattingRenderer(
 ) :
 	createInfo(createInfo),
 	pipelineInfo(CreatePipelineInfo()),
-	query(CreateQuery()) {
+	query(CreateQuery()),
+	durations(
+		{.ellipsoidSplatting = createInfo.device,
+		 .albedoDownsampling = createInfo.device,
+		 .surfaceFiltering = createInfo.device,
+		 .rawNormalEstimation = createInfo.device}
+	) {
 	CreatePipelines();
 	LinkBuffersToSimData();
 	absorptionModifier = CreateAbsorptionModifier(
@@ -51,7 +60,7 @@ auto SplattingRenderer::Create(const SplattingRendererCreateInfo &&createInfo)
 	return std::make_shared<SplattingRenderer>(createInfo);
 }
 
-auto SplattingRenderer::Render() const -> void {
+auto SplattingRenderer::Render() -> void {
 #ifdef GELLY_ENABLE_RENDERDOC_CAPTURES
 	if (renderDoc) {
 		renderDoc->StartFrameCapture(
@@ -59,10 +68,53 @@ auto SplattingRenderer::Render() const -> void {
 		);
 	}
 #endif
+
+	if (settings.enableGPUTiming) {
+		durations.ellipsoidSplatting.Start();
+	}
+	SetFrameResolution(
+		ellipsoidSplatting->GetRenderPass()->GetScaledWidth(),
+		ellipsoidSplatting->GetRenderPass()->GetScaledHeight()
+	);
 	ellipsoidSplatting->Run(createInfo.simData->GetActiveParticles());
-	thicknessExtraction->Run();
+	if (settings.enableGPUTiming) {
+		durations.ellipsoidSplatting.End();
+	}
+
+	SetFrameResolution(
+		albedoDownsampling->GetRenderPass()->GetScaledWidth(),
+		albedoDownsampling->GetRenderPass()->GetScaledHeight()
+	);
+	if (settings.enableGPUTiming) {
+		durations.albedoDownsampling.Start();
+	}
+	albedoDownsampling->Run();
+	if (settings.enableGPUTiming) {
+		durations.albedoDownsampling.End();
+	}
+	SetFrameResolution(
+		surfaceFilteringA->GetRenderPass()->GetScaledWidth(),
+		surfaceFilteringA->GetRenderPass()->GetScaledHeight()
+	);
+	if (settings.enableGPUTiming) {
+		durations.rawNormalEstimation.Start();
+	}
+	SetFrameResolution(
+		rawNormalEstimation->GetRenderPass()->GetScaledWidth(),
+		rawNormalEstimation->GetRenderPass()->GetScaledHeight()
+	);
 	rawNormalEstimation->Run();
+	if (settings.enableGPUTiming) {
+		durations.rawNormalEstimation.End();
+	}
+
+	if (settings.enableGPUTiming) {
+		durations.surfaceFiltering.Start();
+	}
 	RunSurfaceFilteringPipeline(settings.filterIterations);
+	if (settings.enableGPUTiming) {
+		durations.surfaceFiltering.End();
+	}
 #ifdef GELLY_ENABLE_RENDERDOC_CAPTURES
 	if (renderDoc) {
 		renderDoc->EndFrameCapture(
@@ -72,7 +124,6 @@ auto SplattingRenderer::Render() const -> void {
 #endif
 
 	if (settings.enableGPUSynchronization) {
-		createInfo.device->GetRawDeviceContext()->Flush();
 		createInfo.device->GetRawDeviceContext()->End(query.Get());
 
 		// busy wait until the query is done
@@ -81,6 +132,22 @@ auto SplattingRenderer::Render() const -> void {
 			   ) == S_FALSE) {
 			Sleep(0);
 		}
+	}
+
+	if (settings.enableGPUTiming) {
+		latestTimings.ellipsoidSplatting =
+			durations.ellipsoidSplatting.GetDuration();
+		latestTimings.albedoDownsampling =
+			durations.albedoDownsampling.GetDuration();
+		latestTimings.surfaceFiltering =
+			durations.surfaceFiltering.GetDuration();
+		latestTimings.rawNormalEstimation =
+			durations.rawNormalEstimation.GetDuration();
+
+		latestTimings.isDisjoint = durations.ellipsoidSplatting.IsDisjoint() ||
+								   durations.albedoDownsampling.IsDisjoint() ||
+								   durations.surfaceFiltering.IsDisjoint() ||
+								   durations.rawNormalEstimation.IsDisjoint();
 	}
 }
 
@@ -95,39 +162,87 @@ auto SplattingRenderer::UpdateSettings(const Settings &settings) -> void {
 	this->settings = settings;
 }
 
-auto SplattingRenderer::UpdateFrameParams(cbuffer::FluidRenderCBufferData &data
-) const -> void {
+auto SplattingRenderer::FetchTimings() -> Timings { return latestTimings; }
+
+auto SplattingRenderer::UpdateFrameParams(cbuffer::FluidRenderCBufferData &data)
+	-> void {
 	pipelineInfo.internalBuffers->fluidRenderCBuffer.UpdateBuffer(data);
+	std::memcpy(
+		&frameParamCopy, &data, sizeof(cbuffer::FluidRenderCBufferData)
+	);
+}
+
+auto SplattingRenderer::SetFrameResolution(float width, float height) -> void {
+	frameParamCopy.g_ViewportWidth = width;
+	frameParamCopy.g_ViewportHeight = height;
+	frameParamCopy.g_InvViewport.x = 1.f / width;
+	frameParamCopy.g_InvViewport.y = 1.f / height;
+
+	pipelineInfo.internalBuffers->fluidRenderCBuffer.UpdateBuffer(frameParamCopy
+	);
 }
 
 auto SplattingRenderer::CreatePipelines() -> void {
-	ellipsoidSplatting = CreateEllipsoidSplattingPipeline(pipelineInfo);
+	ellipsoidSplatting =
+		CreateEllipsoidSplattingPipeline(pipelineInfo, createInfo.scale);
+	albedoDownsampling =
+		CreateAlbedoDownsamplingPipeline(pipelineInfo, ALBEDO_OUTPUT_SCALE);
+
 	surfaceFilteringA = CreateSurfaceFilteringPipeline(
 		pipelineInfo,
 		pipelineInfo.internalTextures->unfilteredNormals,
-		pipelineInfo.outputTextures->normals
+		pipelineInfo.outputTextures->normals,
+		createInfo.scale
 	);
 	surfaceFilteringB = CreateSurfaceFilteringPipeline(
 		pipelineInfo,
 		pipelineInfo.outputTextures->normals,
-		pipelineInfo.internalTextures->unfilteredNormals
+		pipelineInfo.internalTextures->unfilteredNormals,
+		createInfo.scale
 	);
 
 	rawNormalEstimation = CreateNormalEstimationPipeline(
 		pipelineInfo,
 		pipelineInfo.outputTextures->ellipsoidDepth,
 		pipelineInfo.internalTextures->unfilteredNormals,
-		true
+		createInfo.scale
+	);
+}
+
+auto SplattingRenderer::UpdateTextureRegistry(
+	const InputSharedHandles &inputSharedHandles,
+	float width,
+	float height,
+	float scale
+) -> void {
+	createInfo.width = width;
+	createInfo.height = height;
+	createInfo.inputSharedHandles = inputSharedHandles;
+	createInfo.scale = scale;
+
+	pipelineInfo.width = width;
+	pipelineInfo.height = height;
+
+	pipelineInfo.internalTextures = std::make_shared<InternalTextures>(
+		createInfo.device, createInfo.width, createInfo.height, createInfo.scale
 	);
 
-	thicknessExtraction = CreateThicknessExtractionPipeline(pipelineInfo);
+	pipelineInfo.outputTextures = std::make_shared<OutputTextures>(
+		createInfo.device, createInfo.inputSharedHandles
+	);
+
+	// Re-initialize all pipelines
+	CreatePipelines();
 }
 
 auto SplattingRenderer::CreatePipelineInfo() const -> PipelineInfo {
 	return {
 		.device = createInfo.device,
 		.internalTextures = std::make_shared<InternalTextures>(
-			createInfo.device, createInfo.width, createInfo.height
+			createInfo.device,
+			createInfo.width,
+			createInfo.height,
+			createInfo.scale
 		),
 		.outputTextures = std::make_shared<OutputTextures>(
 			createInfo.device, createInfo.inputSharedHandles
@@ -174,8 +289,8 @@ auto SplattingRenderer::LinkBuffersToSimData() const -> void {
 	);
 }
 
-auto SplattingRenderer::RunSurfaceFilteringPipeline(unsigned int iterations
-) const -> void {
+auto SplattingRenderer::RunSurfaceFilteringPipeline(unsigned int iterations)
+	-> void {
 	if (iterations == 0) {
 		const auto context = createInfo.device->GetRawDeviceContext();
 		// we'll just want to copy unfilted depth to the filtered depth output
@@ -200,8 +315,30 @@ auto SplattingRenderer::RunSurfaceFilteringPipeline(unsigned int iterations
 		);
 	}
 
+	SetFrameResolution(
+		surfaceFilteringA->GetRenderPass()->GetScaledWidth(),
+		surfaceFilteringA->GetRenderPass()->GetScaledHeight()
+	);
+
 	for (int i = 0; i < iterations; i++) {
+		bool oddIteration = i % 2 != 0;
+		frameParamCopy.g_SmoothingPassIndex = i;
+		pipelineInfo.internalBuffers->fluidRenderCBuffer.UpdateBuffer(
+			frameParamCopy
+		);
+
 		if (settings.enableSurfaceFiltering) {
+			// This helps control the propagation of the normals across the mip
+			// chain. If we allow the mip regeneration to happen for every
+			// iteration, the depth-based filter quickly becomes overwhelmed by
+			// the footprint of smaller mips.
+			surfaceFilteringA->GetRenderPass()->SetMipRegenerationEnabled(
+				oddIteration
+			);
+			surfaceFilteringB->GetRenderPass()->SetMipRegenerationEnabled(
+				oddIteration
+			);
+
 			surfaceFilteringA->Run();
 			surfaceFilteringB->Run();
 		}
@@ -219,6 +356,13 @@ auto SplattingRenderer::CreateAbsorptionModifier(
 }
 
 #ifdef GELLY_ENABLE_RENDERDOC_CAPTURES
+auto SplattingRenderer::ReloadAllShaders() -> void {
+	// gsc hotreloads are global, so we simply just need to remove all the
+	// pipelines and remake them
+	ReloadAllGSCShaders();
+	CreatePipelines();
+}
+
 auto SplattingRenderer::InstantiateRenderDoc() -> RENDERDOC_API_1_1_2 * {
 	const HMODULE renderDocModule = GetModuleHandle("renderdoc.dll");
 

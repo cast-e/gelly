@@ -5,6 +5,345 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.27.0] - 2024-10-14
+
+### Added
+
+- Added a new slider, "Resolution Scale" in Graphics. This slider allows you to scale the resolution of the fluid
+  simulation, which can be useful for performance tuning.
+- Added a display for the version in the menu, it's in the top right corner.
+- Added a new switch to Graphics for disabling the Glunk Lighting Fix, which *may* conflict with other mods.
+- The Glunk Lighting Fix, a feature which makes Glunk look better by default in most maps.
+
+### Changed
+
+- Massive optimizations across the board, the fluid should be significantly faster now.
+- Reduced default resolution scale to 0.75
+- Optimize the surface filter to be more efficient particularly on low-bandwidth systems
+
+### Fixed
+
+- Fixed the Gelly Gun's grabber mode not working properly after 1.25.0
+- Fixed resolution changes breaking the fluid simulation
+- Fixed the UI not matching up to the resolution when changed.
+
+### Removed
+
+- Removed old legacy textures, the only reason this is mentioned is that it may particularly benefit low-VRAM systems.
+
+## [1.26.0] - 2024-10-10
+
+### Added
+
+- Added three new sliders to the customization menu.
+- Relaxation: controls fluid simulation convergence speed (dont mess with this unless you know what you're doing)
+- Gravity: self-explanatory! have fun with it
+- Collision Distance: controls how much of an offset the fluid has from the surface it's colliding with
+
+### Changed
+
+- Made blood significantly less bad looking, it should now be more like blood.
+- Improved the liquifier
+- Changed up a lot of the internal simulation details, so expect different behavior
+
+### Fixed
+
+- Fixed a sort of rare bug where the iterations/substeps would not apply on game start unless you modified a setting.
+
+## [1.25.3] - 2024-10-09
+
+### Added
+
+- Added all missing icons for every entity or weapon in the addon
+- Added a new icon for the spawnmenu tab
+
+### Fixed
+
+- Fixed the liquifier gun being pretty much unusable
+
+## [1.25.2] - 2024-10-08
+
+### Fixed
+
+- Fixed reflections being slightly off from the game's color correction.
+
+## [1.25.1] - 2024-10-08
+
+### Fixed
+
+- Fixed forcefields not working anymore after the max particles slider was changed.
+
+## [1.25.0] - 2024-10-08
+
+### Added
+
+- Brand-new customization panel for the Gelly Gun (to get there, press M, hit "Mods").
+- Added more effects and polished the Gelly Gun.
+- Added a new control system for the grabber mode (middle click + E), it should be a lot easier to control fluid now.
+- Added the new Gelly Forcefield object to Entities, which allows you to create physical forcefields to control the
+  fluid.
+- A new spawnmenu tab for Gelly, which allows you to easily spawn Gelly objects.
+
+### Changed
+
+- Error messages are now more thorough when a graphical error happens on the GMod side.
+
+### Removed
+
+- Removed old foam system
+
+## [1.24.2] - 2024-10-07
+
+### Fixed
+
+- Fixed Gelly failing to load on the October 7th update of Garry's Mod.
+
+## [1.24.1] - 2024-10-05
+
+### Added
+
+- Added more information to `gelly_performance_debugger`, which is incredibly useful for debugging slow performance.
+
+### Fixed
+
+- Fixed flushing rendering commands when the query would do it anyways
+
+## [1.24.0] - 2024-10-04
+
+### Added
+
+- A new surface filter, which should work very well at 5 smoothness, 768p to 1080p.
+
+## [1.23.1] - 2024-10-01
+
+### Fixed
+
+- Fixed the **infamous** teleportation bug that caused the fluid to teleport randomly when props were spawned.
+- Fixed the forcefield bug in which a silhouette of the last spawned prop would appear when the forcefield was active.
+
+## [1.23.0] - 2024-10-01
+
+### Added
+
+- Sun lighting! The fluid now reacts to the sun and reflects it when it's in view.
+- Fluids can now be turned opaque with the new "Opaque" switch in the Presets tab of the customization menu.
+
+### Changed
+
+- All lights are significantly less wide in the fluid reflections to prevent the fluid from looking too bright.
+- Blood preset is significantly more opaque.
+- Blood sticks to surfaces more.
+
+### Fixed
+
+- Fixed cubemaps sometimes not updating properly
+- Removed several debug prints that were left in the code
+
+## [1.22.6] - 2024-09-30
+
+### Fixed
+
+- Fixed disc emitter leaking particles
+- Fixed rest distance ratio being in the range of [0, 1] instead of [0.5, 0.7]
+
+## [1.22.5] - 2024-09-29
+
+### Added
+
+- Added color overrides to disc emitters, which allows you to change the color of the fluid emitted by any disc emitter.
+
+## [1.22.4] - 2024-09-29
+
+### Changed
+
+- Adjusted albedo/thickness scaling up to a quarter
+- Implemented new cross filtering technique to reduce thickness artifacts
+
+## [1.22.3] - 2024-09-28
+
+### Changed
+
+- Adjusted the mip curve such that waves and other details should still be preserved
+
+### Fixed
+
+- Fixed the pixelation of the fluid when the camera is close to the fluid.
+- Fixed fluid mixing being virtually non-existent.
+- **Note**: Fluid mixing is still not perfect, but it should be better than before. It **will not** be accurate, but it
+  should be less jarring.
+
+## [1.22.2] - 2024-09-27
+
+### Fixed
+
+- Fixed Glunk being pitch black
+
+## [1.22.1] - 2024-09-27
+
+### Fixed
+
+- Fixed normals propagating through the mip chain, leading to a blurry appearance.
+- Fixed the version popup not bolding the text properly.
+
+## [1.22.0] - 2024-09-25
+
+### Added
+
+- Added the customization menu, a brand-new menu that allows you to customize almost every aspect of the fluid
+  simulation and renderer.
+- **Note**: By default, you can press **M** to open the menu.
+- Adds console variables for most customization options.
+- Adds a new console command, **gelly_toggle_customization**, to open and close the customization menu.
+- **Note**: You may bind this to any key and Gelly will remove the M keybind for the customization menu.
+- New version popup now has bolded text.
+
+### Changed
+
+- The 'max particles' setting is now a slider in the customization menu and a console variable.
+- The range for the 'max particles' setting is now 10,000 to 1,500,000.
+
+### Removed
+
+- Removed legacy preset creator
+- Removed even more legacy settings menu
+
+## [1.21.5] - 2024-09-09
+
+### Fixed
+
+- Fixed Gelly breaking when it was loaded with the September 9th update of Garry's Mod.
+
+## [1.21.4] - 2024-08-30
+
+### Fixed
+
+- Fixed previously simulated particles flickering when the simulation was reset.
+- Fixed renderer resources not being marked properly for synchronization.
+- This may or may not improve the square-shaped corruption bug.
+
+## [1.21.3] - 2024-08-26
+
+### Added
+
+- Added a console command to clear particles while not having the Gelly Gun equipped.
+
+### Changed
+
+- Map cleanup now clears all particles.
+
+## [1.21.2] - 2024-08-25
+
+### Fixed
+
+- Fixed the fluid sometimes flickering to random colors when the camera is moved.
+- This may or may not fix the square flickering issue.
+
+## [1.21.1] - 2024-08-25
+
+### Fixed
+
+- Certain maps that use displacements (TF2 Harvest, most notably) are now supported.
+- Note that the performance of these maps may be worse than usual due to the nature of the fix.
+- These maps are now marked as "bad" and will use the legacy loader to ensure correct simulation.
+
+## [1.21.0] - 2024-08-24
+
+### Added
+
+- Added the disc emitter, a new small disc which emits the current fluid. Configure it with the context menu.
+- Added support for high-radius fluids. Use the "gelly_preset_radius_scale" console command for now.
+
+### Changed
+
+- Linearized the mip regression function with respect to the radius of the fluid. This will make surfaces smoother even
+  at high radius.
+- Water preset is now less spiky, it should be more like water now.
+- Piss preset is the same as the Water preset, but its color was strengthened.
+- Gell-O preset was reworked from scratch, it should now be more like jelly.
+- Glunk preset was smoothed out, it should be very creamy now.
+- Blood preset was tuned to act more like blood, it should be more opaque now as well.
+
+### Removed
+
+- All the legacy emitters were removed, they were replaced by the disc emitter.
+
+### Fixed
+
+- Fixed changelogs being corrupted when they had multiple lines.
+- Fixed FleX instability at high radius
+- Fixed surface filter not working properly with high-radius fluids
+
+## [1.20.4] - 2024-08-20
+
+### Changed
+
+- Reduced the visibility of individual particles in the thickness
+- Thickness is now feathered, which should make it less apparent
+
+## [1.20.3] - 2024-08-20
+
+### Fixed
+
+- Fixed refraction being diagonal, it now properly magnifies the background.
+
+## [1.20.2] - 2024-08-20
+
+### Changed
+
+- Lowered filter iterations
+- The new filter will account for bumpier surfaces, there shouldn't be a noticeable difference in quality, but a boost
+  in performance.
+
+## [1.20.1] - 2024-08-20
+
+### Changed
+
+- Significantly rewrote most of the splatting pass to use low-level optimizations
+- In general, this update provides performance improvements.
+
+## [1.20.0] - 2024-08-19
+
+### Added
+
+- Backported the old additive thickness model. This should alleviate the problem of seeing fluids across walls.
+
+### Changed
+
+- Piss radius was decreased.
+- Piss friction was corrected to be the same as water.
+
+### Removed
+
+- Old physically-based thickness model
+
+## [1.19.1] - 2024-07-22
+
+### Fixed
+
+- Fixed the new binary packing causing an exception when Gelly is loaded multiple times in the same session.
+- It also fixes binary packing being incompatible with alternative mods, such as GWater2.
+
+## [1.19.0] - 2024-07-22
+
+### Added
+
+- New welcome screen for first-time users
+
+### Removed
+
+- Removed the old welcome popup
+- Old popups still appear in case of a fatal error
+
+## [1.18.0] - 2024-07-21
+
+### Changed
+
+- External binaries no longer ship with Gelly, they are now embedded into the binary module.
+- That means, installation should be less flaky.
+- All one needs to do is drag and drop the *single* folder into the GMod root directory.
+- README instructions were changed to be more audience-friendly.
+- Besides that, this release is equivalent to the last one. You don't need to update if you're on 1.17.0.
+
 ## [1.17.0] - 2024-07-13
 
 ### Changed

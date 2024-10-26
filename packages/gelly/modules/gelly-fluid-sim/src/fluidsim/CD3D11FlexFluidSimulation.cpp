@@ -2,6 +2,7 @@
 
 #include <NvFlex.h>
 
+#include <stdexcept>
 #include <string>
 
 // TODO: deduplicate this
@@ -114,8 +115,6 @@ void CD3D11FlexFluidSimulation::Initialize() {
 	solverDesc.maxParticles = maxParticles;
 	// soon...
 	solverDesc.maxDiffuseParticles = simData->GetMaxFoamParticles();
-	solverDesc.maxNeighborsPerParticle = 64;
-	solverDesc.maxContactsPerParticle = maxContactsPerParticle;
 	solverDesc.featureMode = eNvFlexFeatureModeSimpleFluids;
 
 	solver = NvFlexCreateSolver(library, &solverDesc);
@@ -223,6 +222,13 @@ void CD3D11FlexFluidSimulation::DestroyCommandList(ISimCommandList *commandList
 	delete commandList;
 }
 
+void CD3D11FlexFluidSimulation::SetDeferredActiveParticleCount(
+	uint newActiveCount
+) {
+	particleCountUpdateFlags.deferFlag = true;
+	particleCountUpdateFlags.newActiveCount = newActiveCount;
+}
+
 void CD3D11FlexFluidSimulation::ExecuteCommandList(ISimCommandList *commandList
 ) {
 	if (commandList == nullptr) {
@@ -244,6 +250,7 @@ void CD3D11FlexFluidSimulation::ExecuteCommandList(ISimCommandList *commandList
 				using T = std::decay_t<decltype(arg)>;
 				if constexpr (std::is_same_v<T, Reset>) {
 					simData->SetActiveParticles(0);
+					SetDeferredActiveParticleCount(0);
 				} else if constexpr (std::is_same_v<T, AddParticle>) {
 					mappingRequired = true;
 					newParticles.push_back(arg);
@@ -255,9 +262,17 @@ void CD3D11FlexFluidSimulation::ExecuteCommandList(ISimCommandList *commandList
 						arg.vorticityConfinement;
 					solverParams.viscosity = arg.viscosity;
 					solverParams.dynamicFriction = arg.dynamicFriction;
+					solverParams.fluidRestDistance =
+						solverParams.radius * arg.restDistanceRatio;
 				} else if constexpr (std::is_same_v<T, ChangeRadius>) {
 					particleRadius = arg.radius;
 					SetupParams();
+				} else if constexpr (std::is_same_v<T, Configure>) {
+					substeps = arg.substeps;
+					solverParams.numIterations = arg.iterations;
+					solverParams.relaxationFactor = arg.relaxationFactor;
+					solverParams.collisionDistance = arg.collisionDistance;
+					solverParams.gravity[2] = arg.gravity;
 				}
 			},
 			command.data
@@ -266,8 +281,18 @@ void CD3D11FlexFluidSimulation::ExecuteCommandList(ISimCommandList *commandList
 
 	// batches the particle updates
 	if (mappingRequired) {
-		uint currentActiveParticles = simData->GetActiveParticles();
+		uint currentActiveParticles =
+			particleCountUpdateFlags.deferFlag
+				? particleCountUpdateFlags.newActiveCount
+				: simData->GetActiveParticles();
 		uint newActiveParticles = currentActiveParticles + newParticles.size();
+
+		if (newActiveParticles > maxParticles) {
+			// this isn't an error, so we wont throw.
+			// we will silently drop the command however as we want the deferred
+			// count to be a private implementation detail.
+			return;
+		}
 
 		// Update the positions and velocities of the particles
 		NvFlexGetParticles(solver, buffers.positions, nullptr);
@@ -312,12 +337,12 @@ void CD3D11FlexFluidSimulation::ExecuteCommandList(ISimCommandList *commandList
 		NvFlexUnmap(buffers.phases);
 		NvFlexUnmap(buffers.actives);
 
-		simData->SetActiveParticles(newActiveParticles);
+		SetDeferredActiveParticleCount(newActiveParticles);
 
 		NvFlexCopyDesc copyDesc = {};
 		copyDesc.dstOffset = 0;
 		copyDesc.srcOffset = 0;
-		copyDesc.elementCount = simData->GetActiveParticles();
+		copyDesc.elementCount = newActiveParticles;
 
 		NvFlexSetParticles(solver, buffers.positions, &copyDesc);
 		NvFlexSetVelocities(solver, buffers.velocities, &copyDesc);
@@ -327,6 +352,15 @@ void CD3D11FlexFluidSimulation::ExecuteCommandList(ISimCommandList *commandList
 }
 
 void CD3D11FlexFluidSimulation::Update(float deltaTime) {
+	if (particleCountUpdateFlags.deferFlag) {
+		particleCountUpdateFlags.deferFlag = false;
+		simData->SetActiveParticles(particleCountUpdateFlags.newActiveCount);
+	}
+
+	if (simData->GetActiveParticles() <= 0) {
+		return;
+	}
+
 	NvFlexCopyDesc copyDesc = {};
 	copyDesc.dstOffset = 0;
 	copyDesc.srcOffset = 0;
@@ -375,7 +409,7 @@ void CD3D11FlexFluidSimulation::SetupParams() {
 	solverParams.radius = particleRadius;
 	solverParams.gravity[0] = 0.f;
 	solverParams.gravity[1] = 0.f;
-	solverParams.gravity[2] = -4.f;
+	// Z component is configured by the user
 
 	solverParams.viscosity = 0.0f;
 	solverParams.dynamicFriction = 0.1f;
@@ -399,17 +433,15 @@ void CD3D11FlexFluidSimulation::SetupParams() {
 	solverParams.damping = 0.0f;
 	solverParams.particleCollisionMargin = 0.f;
 	solverParams.shapeCollisionMargin = 0.4f;
-	solverParams.collisionDistance = solverParams.fluidRestDistance;
-	solverParams.sleepThreshold = 0.01f;
+	solverParams.sleepThreshold = 0.1f;
 	solverParams.shockPropagation = 0.0f;
 	solverParams.restitution = 1.0f;
 
 	solverParams.maxSpeed = FLT_MAX;
 	solverParams.maxAcceleration = 100.0f;	// approximately 10x gravity
 
-	solverParams.relaxationMode = eNvFlexRelaxationGlobal;
-	solverParams.relaxationFactor = 0.25f;
-	solverParams.solidPressure = 5.0f;
+	solverParams.relaxationMode = eNvFlexRelaxationLocal;
+	solverParams.solidPressure = 0.5f;
 	solverParams.adhesion = 0.0f;
 	solverParams.cohesion = 0.02f;
 	solverParams.surfaceTension = 1.0f;
@@ -480,6 +512,16 @@ bool CD3D11FlexFluidSimulation::CheckFeatureSupport(GELLY_FEATURE feature) {
 		default:
 			return false;
 	}
+}
+
+// Unfortunate result of separations of concerns being totally ignored in our
+// implementation of the absorption feature. But the renderer needs to know the
+// actual number of particles in the simulation at some points, so we expose
+// this here.
+unsigned int CD3D11FlexFluidSimulation::GetRealActiveParticleCount() {
+	return particleCountUpdateFlags.deferFlag
+			   ? particleCountUpdateFlags.newActiveCount
+			   : simData->GetActiveParticles();
 }
 
 void CD3D11FlexFluidSimulation::VisitLatestContactPlanes(

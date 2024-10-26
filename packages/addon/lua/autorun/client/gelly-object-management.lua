@@ -47,7 +47,6 @@ local function addObject(entity)
 	end
 
 	table.insert(objectHandles, entity:EntIndex())
-
 	objects[entity] = objectHandles
 end
 
@@ -64,6 +63,9 @@ end
 
 local function updateObject(entity)
 	local objectHandles = objects[entity]
+	if not objectHandles then
+		return
+	end
 
 	for _, objectHandle in ipairs(objectHandles) do
 		if not IsValid(entity) then
@@ -98,7 +100,13 @@ hook.Add("GellyLoaded", "gelly.object-management-initialize", function()
 		end)
 
 	hook.Add("OnEntityCreated", "gelly.object-add", function(entity)
-		addObject(entity)
+		timer.Simple(0, function()
+			-- Empirical fix for teleportation:
+			-- After much experimentation, Gelly was proven to be properly handling entity updates,
+			-- but GMod is actually the issue--giving us the wrong entity position immediately after creation.
+			addObject(entity)
+			updateObject(entity)
+		end)
 	end)
 
 	hook.Add("EntityRemoved", "gelly.object-remove", function(entity)

@@ -12,7 +12,8 @@ class CD3D11FlexFluidSimulation : public IFluidSimulation {
 private:
 	static constexpr SimCommandType supportedCommands =
 		static_cast<SimCommandType>(
-			RESET | ADD_PARTICLE | CHANGE_RADIUS | SET_FLUID_PROPERTIES
+			RESET | ADD_PARTICLE | CHANGE_RADIUS | SET_FLUID_PROPERTIES |
+			CONFIGURE
 		);
 
 	CD3D11CPUSimData *simData;
@@ -58,8 +59,14 @@ private:
 	int substeps = 3;
 	float timeStepMultiplier = 1.f;
 
+	struct {
+		bool deferFlag : 1;
+		uint newActiveCount : 31;
+	} particleCountUpdateFlags{};
+
 	void SetupParams();
 	void DebugDumpParams();
+	void SetDeferredActiveParticleCount(uint newActiveCount);
 
 public:
 	CD3D11FlexFluidSimulation();
@@ -89,6 +96,7 @@ public:
 
 	const char *GetComputeDeviceName() override;
 	bool CheckFeatureSupport(GELLY_FEATURE feature) override;
+	unsigned int GetRealActiveParticleCount() override;
 
 	void VisitLatestContactPlanes(ContactPlaneVisitor visitor) override;
 };

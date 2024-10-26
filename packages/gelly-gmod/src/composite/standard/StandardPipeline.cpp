@@ -199,6 +199,11 @@ void StandardPipeline::UpdateGellyRenderParams() {
 		)
 	);
 
+	XMFLOAT4X4 invViewProj = {};
+	XMStoreFloat4x4(
+		&invViewProj, XMMatrixInverse(nullptr, XMLoadFloat4x4(&viewProj))
+	);
+
 	// Transpose all matrices
 	XMStoreFloat4x4(
 		&viewMatrix, XMMatrixTranspose(XMLoadFloat4x4(&viewMatrix))
@@ -216,6 +221,11 @@ void StandardPipeline::UpdateGellyRenderParams() {
 	XMStoreFloat4x4(
 		&inverseProjectionMatrix,
 		XMMatrixTranspose(XMLoadFloat4x4(&inverseProjectionMatrix))
+	);
+
+	XMStoreFloat4x4(&viewProj, XMMatrixTranspose(XMLoadFloat4x4(&viewProj)));
+	XMStoreFloat4x4(
+		&invViewProj, XMMatrixTranspose(XMLoadFloat4x4(&invViewProj))
 	);
 
 	gelly::renderer::cbuffer::FluidRenderCBufferData renderParams = {};
@@ -239,12 +249,23 @@ void StandardPipeline::UpdateGellyRenderParams() {
 	renderParams.g_CameraPosition.y = viewSetup.origin.y;
 	renderParams.g_CameraPosition.z = viewSetup.origin.z;
 
+	renderParams.g_InvViewport.x = 1.f / static_cast<float>(viewSetup.width);
+	renderParams.g_InvViewport.y = 1.f / static_cast<float>(viewSetup.height);
+
 	compositeConstants.eyePos[0] = viewSetup.origin.x;
 	compositeConstants.eyePos[1] = viewSetup.origin.y;
 	compositeConstants.eyePos[2] = viewSetup.origin.z;
 
 	compositeConstants.cubemapStrength = config.cubemapStrength;
 	compositeConstants.refractionStrength = config.refractionStrength;
+	compositeConstants.viewProj = viewProj;
+
+	compositeConstants.sourceLightScale[0] = sourceLightScale[0];
+	compositeConstants.sourceLightScale[1] = sourceLightScale[1];
+	compositeConstants.sourceLightScale[2] = sourceLightScale[2];
+	compositeConstants.sourceLightScale[3] = sourceLightScale[3];
+
+	compositeConstants.invViewProj = invViewProj;
 
 	for (int index = 1; index < 3; index++) {
 		auto light = GetLightDesc(index);
@@ -271,6 +292,11 @@ void StandardPipeline::UpdateGellyRenderParams() {
 	compositeConstants.aspectRatio =
 		static_cast<float>(viewSetup.width) / viewSetup.height;
 
+	compositeConstants.sunDirection[0] = config.sunDirection[0];
+	compositeConstants.sunDirection[1] = config.sunDirection[1];
+	compositeConstants.sunDirection[2] = config.sunDirection[2];
+	compositeConstants.sunEnabled = config.sunEnabled;
+
 	renderer->UpdateFrameParams(renderParams);
 
 	std::memcpy(
@@ -291,8 +317,8 @@ void StandardPipeline::SetCompositeSamplerState(
 	int index, D3DTEXTUREFILTERTYPE filter, bool srgb = false
 ) const {
 	auto &device = gmodResources.device;
-	device->SetSamplerState(index, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
-	device->SetSamplerState(index, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
+	device->SetSamplerState(index, D3DSAMP_ADDRESSU, D3DTADDRESS_MIRROR);
+	device->SetSamplerState(index, D3DSAMP_ADDRESSV, D3DTADDRESS_MIRROR);
 
 	device->SetSamplerState(index, D3DSAMP_MINFILTER, filter);
 	device->SetSamplerState(index, D3DSAMP_MAGFILTER, filter);
@@ -312,18 +338,24 @@ StandardPipeline::StandardPipeline(unsigned int width, unsigned height) :
 	compositeShader(),
 	quadVertexShader(),
 	width(width),
-	height(height) {}
+	height(height) {
+	SetupAmbientLightCubeHook();
+}
 
 StandardPipeline::~StandardPipeline() { RemoveAmbientLightCubeHooks(); }
 
 gelly::renderer::splatting::InputSharedHandles
 StandardPipeline::CreatePipelineLocalResources(
-	const GellyResources &gelly, const UnownedResources &gmod
+	const GellyResources &gelly,
+	const UnownedResources &gmod,
+	unsigned int width,
+	unsigned int height,
+	float scale
 ) {
 	gellyResources = gelly;
 	gmodResources = gmod;
 
-	textures.emplace(gmodResources, width, height);
+	textures.emplace(gmodResources, width, height, scale);
 	CreateCompositeShader();
 	CreateQuadVertexShader();
 	CreateNDCQuad();
@@ -348,38 +380,6 @@ void StandardPipeline::SetFluidMaterial(const PipelineFluidMaterial &material) {
 	fluidMaterial = material;
 }
 
-void StandardPipeline::CompositeFoam(bool withGellyRendered) const {
-	auto &device = gmodResources.device;
-
-	stateBlock->Capture();
-
-	SetCompositeShaderConstants();
-	device->SetVertexShader(quadVertexShader.Get());
-	device->SetPixelShader(compositeFoamShader.Get());
-
-	SetCompositeSamplerState(0, D3DTEXF_POINT);
-
-	device->SetTexture(0, textures->gmodTextures.foam.Get());
-	device->SetStreamSource(0, ndcQuad.Get(), 0, sizeof(NDCVertex));
-	device->SetFVF(D3DFVF_XYZW | D3DFVF_TEX1);
-
-	device->SetRenderState(D3DRS_ZENABLE, TRUE);
-	device->SetRenderState(
-		D3DRS_ZWRITEENABLE, withGellyRendered ? TRUE : FALSE
-	);
-
-	// We do actually want to use an alpha blend here
-	device->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
-	device->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
-	device->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
-	device->SetRenderState(D3DRS_FILLMODE, D3DFILL_SOLID);
-
-	device->SetRenderState(D3DRS_SRGBWRITEENABLE, TRUE);
-	device->DrawPrimitive(D3DPT_TRIANGLESTRIP, 0, 2);
-
-	stateBlock->Apply();
-}
-
 void StandardPipeline::Composite() {
 	auto &device = gmodResources.device;
 
@@ -388,25 +388,25 @@ void StandardPipeline::Composite() {
 
 	stateBlock->Capture();
 
+	device->GetPixelShaderConstantF(30, sourceLightScale, 1);
+
 	SetCompositeShaderConstants();
 	device->SetVertexShader(quadVertexShader.Get());
 	device->SetPixelShader(compositeShader.Get());
 
 	SetCompositeSamplerState(0, D3DTEXF_POINT);
 	SetCompositeSamplerState(1, D3DTEXF_POINT);
-	SetCompositeSamplerState(2, D3DTEXF_POINT);
-	SetCompositeSamplerState(3, D3DTEXF_POINT, true);
-	SetCompositeSamplerState(4, D3DTEXF_LINEAR);
+	SetCompositeSamplerState(2, D3DTEXF_POINT, true);
+	SetCompositeSamplerState(3, D3DTEXF_LINEAR);
+	SetCompositeSamplerState(4, D3DTEXF_LINEAR, true);
 	SetCompositeSamplerState(5, D3DTEXF_LINEAR);
-	SetCompositeSamplerState(6, D3DTEXF_LINEAR);
 
 	device->SetTexture(0, textures->gmodTextures.depth.Get());
 	device->SetTexture(1, textures->gmodTextures.normal.Get());
-	device->SetTexture(2, textures->gmodTextures.position.Get());
-	device->SetTexture(3, backBuffer.Get());
-	device->SetTexture(4, textures->gmodTextures.thickness.Get());
-	device->SetTexture(5, GetCubemap());
-	device->SetTexture(6, textures->gmodTextures.albedo.Get());
+	device->SetTexture(2, backBuffer.Get());
+	device->SetTexture(3, textures->gmodTextures.thickness.Get());
+	device->SetTexture(4, GetCubemap());
+	device->SetTexture(5, textures->gmodTextures.albedo.Get());
 
 	device->SetStreamSource(0, ndcQuad.Get(), 0, sizeof(NDCVertex));
 	device->SetFVF(D3DFVF_XYZW | D3DFVF_TEX1);
@@ -418,8 +418,13 @@ void StandardPipeline::Composite() {
 	// composite
 	device->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
 	device->SetRenderState(D3DRS_SRGBWRITEENABLE, TRUE);
-	// and multisanple antialiasing
-	device->SetRenderState(D3DRS_MULTISAMPLEANTIALIAS, TRUE);
+	// we also want to disable any sort of fixed-function color transforms,
+	// a notable example is when the fluid flickers to purple randomly
+	device->SetRenderState(D3DRS_FOGENABLE, FALSE);
+	device->SetRenderState(D3DRS_STENCILENABLE, FALSE);
+	device->SetRenderState(D3DRS_LIGHTING, FALSE);
+	device->SetRenderState(D3DRS_COLORVERTEX, FALSE);
+	device->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
 	device->SetRenderState(D3DRS_FILLMODE, D3DFILL_SOLID);
 
 	device->DrawPrimitive(D3DPT_TRIANGLESTRIP, 0, 2);
@@ -436,3 +441,10 @@ void StandardPipeline::Render() {
 	UpdateGellyRenderParams();
 	RenderGellyFrame();
 }
+
+#ifdef GELLY_ENABLE_RENDERDOC_CAPTURES
+void StandardPipeline::ReloadAllShaders() {
+	CreateCompositeShader();
+	CreateQuadVertexShader();
+}
+#endif

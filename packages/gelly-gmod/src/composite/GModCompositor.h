@@ -12,6 +12,7 @@ private:
 
 	unsigned int width;
 	unsigned int height;
+	float scale;
 
 public:
 	GModCompositor(
@@ -20,7 +21,8 @@ public:
 		const std::shared_ptr<gelly::renderer::Device> &device,
 		unsigned int width,
 		unsigned int height,
-		unsigned int maxParticles
+		unsigned int maxParticles,
+		float scale
 	);
 
 	GModCompositor(const GModCompositor &) = delete;
@@ -28,10 +30,7 @@ public:
 	GModCompositor(GModCompositor &&) = delete;
 	GModCompositor &operator=(GModCompositor &&) = delete;
 
-	~GModCompositor() {
-		LOG_INFO("GModCompositor destructor called");
-		// we dont need to delete pipeline because it is a unique_ptr
-	}
+	~GModCompositor() = default;
 
 	void SetConfig(PipelineConfig config);
 	[[nodiscard]] PipelineConfig GetConfig() const;
@@ -40,9 +39,34 @@ public:
 	void Composite();
 	void Render();
 
+	void ChangeResolution(
+		unsigned int newWidth, unsigned int newHeight, float scale
+	) {
+		auto newHandles = pipeline->CreatePipelineLocalResources(
+			gellyResources,
+			Resources::FindGModResources(),
+			newWidth,
+			newHeight,
+			scale
+		);
+
+		gellyResources.splattingRenderer->UpdateTextureRegistry(
+			newHandles, newWidth, newHeight, scale
+		);
+
+		width = newWidth;
+		height = newHeight;
+		this->scale = scale;
+	}
+#ifdef GELLY_ENABLE_RENDERDOC_CAPTURES
+	void ReloadAllShaders();
+#endif
+
 	[[nodiscard]] unsigned int GetWidth() const { return width; }
 
 	[[nodiscard]] unsigned int GetHeight() const { return height; }
+
+	[[nodiscard]] float GetScale() const { return scale; }
 
 	// any non-const access to the GellyResources should be avoided
 	[[nodiscard]] const GellyResources &GetGellyResources() const {
@@ -62,6 +86,10 @@ public:
 	void UpdateGellySettings(const SplattingRenderer::Settings &settings
 	) const {
 		gellyResources.splattingRenderer->UpdateSettings(settings);
+	}
+
+	[[nodiscard]] SplattingRenderer::Timings FetchGellyTimings() const {
+		return gellyResources.splattingRenderer->FetchTimings();
 	}
 };
 
