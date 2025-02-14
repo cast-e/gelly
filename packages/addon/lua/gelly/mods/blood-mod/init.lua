@@ -220,32 +220,43 @@ end
 local function bleedEffect(damage, victim, position, material)
     local bleedDuration = math.Clamp(damage / 10, 2, 10)
     local boneIndex = getClosestBone(victim, position)
-    local relativePosition = position - (boneIndex and victim:GetBonePosition(boneIndex) or Vector(0, 0, 0))
 
+    local boneMatrix = victim:GetBoneMatrix(boneIndex)
+
+    if not boneMatrix or not position then
+        return
+    end
+    
+    local localOffset = boneMatrix:GetInverse() * position
+    
     timer.Create("gelly.builtin.steady-bleed-timer" .. victim:EntIndex(), 0.01, bleedDuration * 100, function()
         if not victim:IsValid() then
             timer.Remove("gelly.builtin.steady-bleed-timer" .. victim:EntIndex())
             return
         end
 
-        local bonePos = boneIndex and victim:GetBonePosition(boneIndex)
-        if bonePos then
-            gellyx.emitters.Cube({
-                center = bonePos + relativePosition,
-                velocity = (position - victim:GetPos()):GetNormalized() * 4,
-                bounds = Vector(2, 2, 2),
-                density = damage,
-                randomness = 0.1,
-                material = material,
-            })
-        end
+        local currentMatrix = victim:GetBoneMatrix(boneIndex)
+        if not currentMatrix then return end
+
+        local worldPosition = currentMatrix * localOffset
+
+        local velocity = (worldPosition - currentMatrix:GetTranslation()):GetNormalized() * 4
+
+        gellyx.emitters.Cube({
+            center = worldPosition,
+            velocity = velocity,
+            bounds = Vector(2, 2, 2),
+            density = damage * 0.25,
+            randomness = 0.3,
+            material = material,
+        })
     end)
 end
 
-hook.Add("GellyXDamage", "gelly.builtin.blood-mod", function(victim, attacker, position, force, damage, type)
+hook.Add("GellyXDamage", "gelly.builtin.blood-mod", function(victim, attacker, position, force, damage, type, bloodcolor)
     if not victim:IsValid() then return end
 
-    local absorption = BLOOD_COLOR_ABSORPTION[victim:GetInternalVariable("BloodColor") or BLOOD_COLOR_RED]
+    local absorption = BLOOD_COLOR_ABSORPTION[bloodcolor or BLOOD_COLOR_RED]
 
     if not absorption then
         return
@@ -256,30 +267,22 @@ hook.Add("GellyXDamage", "gelly.builtin.blood-mod", function(victim, attacker, p
         gelly.Reset()
     end
 
-    if bit.band(type, DMG_BLAST) ~= 0 then
-        sprayExplosionBlood(type, victim, attacker, position, force, damage, {
-            Roughness = 0,
-            IsSpecularTransmission = true,
-            RefractiveIndex = 1.373,
-            Absorption = absorption * 40,
-            DiffuseColor = Vector(0, 0, 0),
-        })
-    else
-        sprayBlood(type, victim, attacker, position, force, damage, {
-            Roughness = 0,
-            IsSpecularTransmission = true,
-            RefractiveIndex = 1.373,
-            Absorption = absorption * 40,
-            DiffuseColor = Vector(0, 0, 0),
-        })
+    local material = {
+        Roughness = 0,
+        IsSpecularTransmission = true,
+        RefractiveIndex = 1.373,
+        Absorption = absorption * 40,
+        DiffuseColor = Vector(0, 0, 0),
+    }
 
-        bleedEffect(damage, victim, position, {
-            Roughness = 0,
-            IsSpecularTransmission = true,
-            RefractiveIndex = 1.373,
-            Absorption = absorption * 40,
-            DiffuseColor = Vector(0, 0, 0),
-        })
+    if bit.band(type, DMG_BLAST) ~= 0 then
+        sprayExplosionBlood(type, victim, attacker, position, force, damage, material)
+    else
+        sprayBlood(type, victim, attacker, position, force, damage, material)
+
+        if math.random(0, 2) == 0 then
+            bleedEffect(damage, victim, position, material)
+        end
     end
 end )
 

@@ -10,7 +10,7 @@ if SERVER then
 	---@param force Vector
 	---@param damage number
 	---@param type number
-	function gellyx.replicateDamage(victim, attacker, position, force, damage, type)
+	function gellyx.replicateDamage(victim, attacker, position, force, damage, type, bloodcolor)
 		net.Start(gellyx.DAMAGE_REP_NETMSG)
 		net.WriteEntity(victim)
 		net.WriteEntity(attacker)
@@ -18,6 +18,7 @@ if SERVER then
 		net.WriteVector(force)
 		net.WriteFloat(damage)
 		net.WriteUInt(type, 32)
+		net.WriteInt(bloodcolor, 4)
 		net.Broadcast()
 		return damage
 	end
@@ -31,7 +32,8 @@ if CLIENT then
 		local force = net.ReadVector()
 		local damage = net.ReadFloat()
 		local type = net.ReadUInt(32)
+		local bloodcolor = net.ReadInt(4)
 
-		hook.Run("GellyXDamage", victim, attacker, position, force, damage, type)
+		hook.Run("GellyXDamage", victim, attacker, position, force, damage, type, bloodcolor)
 	end)
 end

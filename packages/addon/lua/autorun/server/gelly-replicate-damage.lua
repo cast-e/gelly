@@ -9,9 +9,10 @@ hook.Add("EntityTakeDamage", "gelly.damage-replication", function(target, dmgInf
 	local position = dmgInfo:GetDamagePosition()
 	local force = dmgInfo:GetDamageForce()
 	local type = dmgInfo:GetDamageType()
+	local bloodcolor = target.BloodColor
 
 	if target:IsValid() and target.MaxBloodQuantity and target.BloodQuantity > 0 then
-		gellyx.replicateDamage(target, attacker, position, force, damage * math.max(0, target.BloodQuantity / target.MaxBloodQuantity), type)
+		gellyx.replicateDamage(target, attacker, position, force, damage * math.max(0, target.BloodQuantity / target.MaxBloodQuantity), type, bloodcolor)
 		target.BloodQuantity = target.BloodQuantity - (damage * 0.1) * math.max(0, target.BloodQuantity / target.MaxBloodQuantity)
 	end
 end)
