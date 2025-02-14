@@ -9,11 +9,20 @@ hook.Add("OnEntityCreated", "gelly.blood-quantity", function(entity)
 		return
 	end
 
-	entity.MaxBloodQuantity = entity.MaxBloodQuantity or 100
-	entity.BloodQuantity = entity.BloodQuantity or entity.MaxBloodQuantity
+	timer.Simple(0, function()
+		if not entity:IsValid() then
+			return
+		end
+
+		entity.MaxBloodQuantity = entity.MaxBloodQuantity or entity:GetMaxHealth() or 100
+		entity.BloodQuantity = entity.BloodQuantity or entity:Health() or entity.MaxBloodQuantity
+
+		entity:SetSaveValue("BloodColor", entity:GetBloodColor() or BLOOD_COLOR_RED)
+	end )
 end)
 
 hook.Add("CreateEntityRagdoll", "gelly.blood-quantity-ragdoll", function(owner, ragdoll)
 	ragdoll.MaxBloodQuantity = owner.MaxBloodQuantity
 	ragdoll.BloodQuantity = owner.BloodQuantity
+	ragdoll:SetSaveValue("BloodColor", owner:GetInternalVariable("BloodColor"))
 end)
