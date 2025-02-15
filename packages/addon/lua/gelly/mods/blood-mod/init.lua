@@ -223,7 +223,7 @@ local function bleedEffect(damage, victim, position, material)
 
     local boneMatrix = victim:GetBoneMatrix(boneIndex)
 
-    if not boneMatrix or not position then
+    if not IsValid(boneMatrix) then
         return
     end
     
