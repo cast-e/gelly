@@ -4,5 +4,5 @@ local DEFAULT_PRESET = "Water"
 gellyx.presets.select(DEFAULT_PRESET)
 
 hook.Add("GellyModsShutdown", "gellyx.builtin.sandbox-mod", function()
-	gelly.Reset()
+	gellymp.Reset()
 end)

@@ -16,7 +16,7 @@ end
 ---@param material table|nil The material to use for the particles, if not provided the active preset's material will be used.
 ---@return boolean
 function gellyx.AddParticles(particles, material)
-	material = material or GELLY_ACTIVE_PRESET.Material
+	material = (material ~= {} and GELLY_ACTIVE_PRESET.Material) or material or GELLY_ACTIVE_PRESET.Material
 
 	local rawParticles = {}
 	if gellyx.isParticleLimitReached(#particles) then

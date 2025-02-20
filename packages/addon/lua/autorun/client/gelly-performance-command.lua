@@ -13,7 +13,7 @@ local function performanceDebugger()
 	end
 
 	gui.HideGameUI()
-	gelly.Reset()
+	gellymp.Reset()
 	gellyx.presets.select("Water")
 
 	local sampler = TimingSampler.new()
@@ -69,7 +69,7 @@ local function performanceDebugger()
 
 		sampler:RemoveTimingHooks()
 		gelly.SetTimeStepMultiplier(1)
-		gelly.Reset()
+		gellymp.Reset()
 		hook.Remove("CalcView", "gelly.performance-debugger")
 		print("Performance test complete.")
 		print(("Render time (CPU, ms): %.2f"):format(sampler:GetRenderAverage()))

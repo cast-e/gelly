@@ -64,5 +64,5 @@ hook.Add("PostRender", "gelly.load-gelly", function()
 end)
 
 hook.Add("PreCleanupMap", "gelly.cleanup", function()
-	gelly.Reset()
+	gellymp.Reset()
 end)

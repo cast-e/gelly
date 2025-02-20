@@ -37,17 +37,22 @@ function SWEP:PrimaryAttack()
 		return
 	end
 
+	local params = {
+		entity = hitEntity,
+		density = self.TriangleDensity,
+	}
+
 	if SERVER then
+
+		gellymp.MeshEmitter(params, self:GetOwner())
+
 		self:GetOwner():ViewPunch(AngleRand(-10, 10))
 		self:CallOnClient("PrimaryAttack")
 		SafeRemoveEntityDelayed(hitEntity, 0) -- a tick later
 		return
 	end
 
-	gellyx.emitters.Mesh({
-		entity = hitEntity,
-		density = self.TriangleDensity,
-	})
+	gellyx.emitters.Mesh(params)
 
 	self:EmitEffects(eyeTrace.HitPos)
 	self:EmitSounds()

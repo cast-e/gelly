@@ -160,7 +160,7 @@ hook.Add(
 
 		if GELLY_ACTIVE_PRESET.Name ~= "Blood" then
 			gellyx.presets.select("Blood")
-			gelly.Reset()
+			gellymp.Reset()
 		end
 
 		sprayBlood(type, victim, attacker, position, force, damage, {
@@ -180,7 +180,7 @@ hook.Add("GellyModsShutdown", "gelly.builtin.blood-mod", function()
 	hook.Remove("OnEntityCreated", "gelly.blood-quantity")
 	hook.Remove("CreateEntityRagdoll", "gelly.blood-quantity-ragdoll")
 	-- remove any left over blood
-	gelly.Reset()
+	gellymp.Reset()
 
 	print("Blood mod unloaded")
 end)

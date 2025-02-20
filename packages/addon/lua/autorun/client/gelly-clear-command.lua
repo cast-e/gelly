@@ -1,5 +1,5 @@
 hook.Add("GellyLoaded", "gelly.clear-particles-command", function()
 	concommand.Add("gelly_clear_particles", function()
-	    gelly.Reset()
+	    gellymp.Reset()
 	end)
 end)

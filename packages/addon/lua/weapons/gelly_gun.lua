@@ -110,38 +110,49 @@ function SWEP:GetSecondaryBounds()
 end
 
 function SWEP:PrimaryAttack()
-	if SERVER then
-		self:CallOnClient("PrimaryAttack")
-		return
-	end
 	---@type Player
 	local owner = self:GetOwner()
 
-	gellyx.emitters.Cube({
-		center = owner:GetShootPos() + owner:GetAimVector() * gellyx.settings.get("gelly_gun_distance"):GetFloat(),
+	local params = {
+		center = owner:GetShootPos() + owner:GetAimVector() * 100,
 		velocity = owner:GetAimVector() * 2,
-		bounds = self:GetPrimaryBounds(),
-		density = gellyx.settings.get("gelly_gun_density"):GetInt() / gellyx.presets.getEffectiveRadius(),
-		invMass = 1 / gellyx.settings.get("particle_mass"):GetFloat(),
-	})
+		bounds = Vector(5, 5, 5), --self:GetPrimaryBounds(),
+		density = 250 / 3.5,
+		invMass = 1 / 2,
+	}
+
+	if SERVER then
+		gellymp.CubeEmitter(params, owner)
+
+		self:CallOnClient("PrimaryAttack")
+		return
+	end
+
+	gellyx.emitters.Cube(params)
 
 	self:SetNextPrimaryFire(CurTime() + 1 / self.FireRate)
 end
 
 function SWEP:SecondaryAttack()
+	---@type Player
+	local owner = self:GetOwner()
+
+	local params = {
+		center = owner:GetShootPos() + owner:GetAimVector() * 100,
+		velocity = owner:GetAimVector() * 100,
+		bounds = Vector(5, 5, 5), --self:GetSecondaryBounds(),
+		density = 250 / 3.5,
+		invMass = 1 / 2,
+	}
+
 	if SERVER then
+		gellymp.CubeEmitter(params, owner)
+
 		self:CallOnClient("SecondaryAttack")
 		return
 	end
 
-	local owner = self:GetOwner()
-	gellyx.emitters.Cube({
-		center = owner:GetShootPos() + owner:GetAimVector() * gellyx.settings.get("gelly_gun_distance"):GetFloat(),
-		velocity = owner:GetAimVector() * gellyx.settings.get("gelly_gun_secondary_velocity"):GetFloat(),
-		bounds = self:GetSecondaryBounds(),
-		density = gellyx.settings.get("gelly_gun_density"):GetInt() / gellyx.presets.getEffectiveRadius(),
-		invMass = 1 / gellyx.settings.get("particle_mass"):GetFloat(),
-	})
+	gellyx.emitters.Cube(params)
 
 	self:SetNextSecondaryFire(CurTime() + 1 / self.FireRate * self.RapidFireBoost)
 end
@@ -310,7 +321,7 @@ local function createMenuPanel()
 		table.insert(PANEL.MenuOptions, {
 			Name = preset.Name,
 			OnSelect = function()
-				gelly.Reset()
+				gellymp.Reset()
 				gellyx.presets.select(preset.Name)
 			end,
 		})
@@ -319,7 +330,7 @@ local function createMenuPanel()
 	table.insert(PANEL.MenuOptions, {
 		Name = "Clear particles",
 		OnSelect = function()
-			gelly.Reset()
+			gellymp.Reset()
 		end,
 	})
 

@@ -59,7 +59,7 @@ hook.Add("GellyLoaded", "gelly.init-dev-ui", function()
 	radiusSlider:SetDecimals(2)
 
 	radiusSlider.OnValueChanged = function(_, value)
-		gelly.Reset()
+		gellymp.Reset()
 		gelly.ChangeParticleRadius(value)
 		-- Re apply the preset as that causes an invalidation of the simulation
 		gellyx.presets.select(gellyx.presets.getActivePreset().Name)
@@ -179,7 +179,7 @@ hook.Add("GellyLoaded", "gelly.init-dev-ui", function()
 	resetButton:SetSize(200, 50)
 	resetButton:SetText("Reset")
 	resetButton.DoClick = function()
-		gelly.Reset()
+		gellymp.Reset()
 	end
 
 	local toggleSimulationButton = vgui.Create("DButton")

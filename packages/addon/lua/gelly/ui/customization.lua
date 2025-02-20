@@ -150,7 +150,7 @@ function PANEL:SetupJSEnvironment()
 	self.HTML:AddFunction("gelly", "selectPreset", function(presetName)
 		surface.PlaySound("garrysmod/ui_click.wav")
 		gellyx.presets.select(presetName)
-		gelly.Reset()
+		gellymp.Reset()
 	end)
 
 	self.HTML:AddFunction("gelly", "getPresets", function()
