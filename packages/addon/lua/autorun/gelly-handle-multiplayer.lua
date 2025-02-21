@@ -46,21 +46,6 @@ if SERVER then
         net.SendOmit(ply)
     end
 
-    net.Receive(gellymp.CREATE_FORCEFIELD_CLIENT_NETMSG, function(_, ply)
-        local position = net.ReadVector()
-        local radius = net.ReadVector()
-        local strength = net.ReadVector()
-        local linearfalloff = net.ReadBool()
-        local mode = net.ReadUInt(2)
-        gellymp.AddForcefield({
-            Position = position,
-            Radius = radius,
-            Strength = strength,
-            LinearFalloff = linearfalloff,
-            Mode = mode,
-        }, ply)
-    end)
-
     net.Receive(gellymp.RESET_CLIENT_NETMSG, function(_, ply)
         net.Start(gellymp.RESET_NETMSG)
         net.Broadcast()
@@ -88,12 +73,12 @@ if CLIENT then
     end)
 
     net.Receive(gellymp.SPHERE_EMITTER_NETMSG, function(_, _)
-        local center = net.WriteVector(params.center)
-        local radius = net.WriteFloat(params.radius)
-        local velocity = net.WriteVector(params.velocity)
-        local density = net.WriteFloat(params.density)
-        local randomness = net.WriteFloat(params.randomness)
-        local material = net.WriteTable(params.material or nil)
+        local center = net.ReadVector()
+        local radius = net.ReadFloat()
+        local velocity = net.ReadVector()
+        local density = net.ReadFloat()
+        local randomness = net.ReadFloat()
+        local material = net.ReadTable()
         gellyx.emitters.Sphere({
             center = center,
             radius = radius,
@@ -105,9 +90,9 @@ if CLIENT then
     end)
 
     net.Receive(gellymp.MESH_EMITTER_NETMSG, function(_, _)
-        local entity = net.WriteEntity(params.entity)
-        local density = net.WriteFloat(params.density)
-        local material = net.WriteTable(params.material)
+        local entity = net.ReadEntity()
+        local density = net.ReadFloat()
+        local material = net.ReadTable()
         gellyx.emitters.Mesh({
             entity = entity,
             density = density,
